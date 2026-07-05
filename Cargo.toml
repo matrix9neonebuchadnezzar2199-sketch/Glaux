@@ -1,0 +1,38 @@
+[package]
+name = "glaux"
+version = "0.2.0"
+edition = "2021"
+description = "Glaux -OFFLINE AI Chat- — local offline chatbot with portable Gemma 4 bundle"
+build = "build.rs"
+
+[dependencies]
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "wgpu"] }
+egui = "0.31"
+epaint = { version = "0.31", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["blocking", "json", "stream"] }
+sha2 = "0.10"
+hex = "0.4"
+directories = "5"
+sysinfo = "0.33"
+chrono = "0.4"
+anyhow = "1"
+thiserror = "2"
+parking_lot = "0.12"
+arboard = "3"
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[build-dependencies]
+sha2 = "0.10"
+hex = "0.4"
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+ico = "0.3"
+winres = "0.1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

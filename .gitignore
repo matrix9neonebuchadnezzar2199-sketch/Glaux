@@ -1,0 +1,9 @@
+artifacts/
+target/
+target-agent-check/
+dist/
+.cache/
+*.gguf
+*.exe
+debug-*.log
+!artifacts/.gitkeep
