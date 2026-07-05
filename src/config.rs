@@ -10,10 +10,10 @@ pub const CONTEXT_LENGTH: u32 = 1_000;
 pub const LLAMA_THREADS: u32 = 2;
 /// 論理バッチサイズ（プロンプト処理時ピーク RAM 抑制）
 pub const LLAMA_BATCH_SIZE: u32 = 256;
-/// 物理バッチサイズ（計算バッファは ubatch に比例）
-pub const LLAMA_UBATCH_SIZE: u32 = 64;
-/// Flash Attention（-ctv q8_0 は FA 前提）
-pub const LLAMA_FLASH_ATTN: &str = "on";
+/// 物理バッチサイズ。64 まで下げるとプロンプト処理が体感 2 倍遅くなるため 128 を維持
+pub const LLAMA_UBATCH_SIZE: u32 = 128;
+/// Flash Attention。CPU では強制 on が逆に遅くなるケースがあるため auto（実測で減速確認済み）
+pub const LLAMA_FLASH_ATTN: &str = "auto";
 /// SWA コンテキスト checkpoint 数（0 = 無効・RAM 節約）
 pub const LLAMA_CTX_CHECKPOINTS: u32 = 0;
 /// KV キャッシュ量子化（f16 既定より RAM 節約）

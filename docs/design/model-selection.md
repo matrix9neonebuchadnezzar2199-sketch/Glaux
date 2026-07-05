@@ -17,7 +17,7 @@
 - 既定は **E2B**。設定画面で **E4B** を手動選択可能（`model/` にファイルがある場合）
 - `build-release.ps1` は `artifacts/model/` に E4B があるときのみ dist へ同梱
 - コンテキスト長は **1000** 固定（低メモリ向け。設定 UI なし）
-- llama-server は `-t 2`、`-b 256`、`-ub 64`、`-ctk/-ctv q8_0`、`-fa on`、`--cache-ram 0`、`--no-warmup`、`--no-webui`、`--ctx-checkpoints 0`、`-np 1`、CPU のみ
+- llama-server は `-t 2`、`-b 256`、`-ub 128`、`-ctk/-ctv q8_0`、`-fa auto`、`--cache-ram 0`、`--no-warmup`、`--no-webui`、`--ctx-checkpoints 0`、`-np 1`、CPU のみ
 
 ## 採用理由
 

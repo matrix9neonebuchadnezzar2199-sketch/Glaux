@@ -232,7 +232,7 @@ impl LlamaServerHandle {
                 "kv_cache": LLAMA_KV_CACHE_TYPE,
                 "flash_attn": LLAMA_FLASH_ATTN,
                 "ctx_checkpoints": LLAMA_CTX_CHECKPOINTS,
-                "cmd_flags": "-c -np -t -b -ub -ctk -ctv -ngl --no-op-offload --device --cache-ram 0 --no-warmup --no-webui -fa on --ctx-checkpoints 0",
+                "cmd_flags": "-c -np -t -b -ub -ctk -ctv -ngl --no-op-offload --device --cache-ram 0 --no-warmup --no-webui -fa auto --ctx-checkpoints 0",
             }),
         );
         // #endregion
