@@ -5,7 +5,7 @@ use crate::context::ContextUsageLevel;
 use crate::config::{model_display_name, CONTEXT_LENGTH};
 use crate::debug_agent_log;
 use crate::model_state::ModelRuntimeState;
-use crate::paths::APP_TITLE;
+use crate::paths::{APP_TITLE, APP_VERSION};
 use crate::ui::prompt_assist;
 use egui::{Align, Color32, CornerRadius, Frame, Label, Layout, Margin, RichText, ScrollArea, Stroke};
 
@@ -50,6 +50,12 @@ pub fn draw_main(app: &mut GlauxApp, ctx: &egui::Context) {
                             app.show_help = true;
                         }
                         nav_button(ui, "設定", || app.show_settings = true);
+                        ui.add_space(8.0);
+                        ui.label(
+                            RichText::new(format!("v{APP_VERSION}"))
+                                .size(12.0)
+                                .color(theme.muted),
+                        );
                     });
                 });
             });

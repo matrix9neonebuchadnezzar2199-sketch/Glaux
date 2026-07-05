@@ -4,6 +4,8 @@ use std::path::PathBuf;
 
 /// アプリ表示名（ウィンドウタイトル等）
 pub const APP_TITLE: &str = "Glaux -OFFLINE AI Chat-";
+/// Cargo.toml の package.version（ビルド時に埋め込み）
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// 実行ファイルのあるディレクトリ（ポータブル配布のルート）
 pub fn app_root() -> PathBuf {

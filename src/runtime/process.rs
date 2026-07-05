@@ -9,8 +9,7 @@ use sysinfo::{MemoryRefreshKind, Pid, ProcessesToUpdate, RefreshKind, System};
 use super::append_log;
 use super::extractor::RuntimePaths;
 use crate::config::{
-    LLAMA_BATCH_SIZE, LLAMA_CTX_CHECKPOINTS, LLAMA_FLASH_ATTN, LLAMA_KV_CACHE_TYPE,
-    LLAMA_THREADS, LLAMA_UBATCH_SIZE,
+    LLAMA_BATCH_SIZE, LLAMA_FLASH_ATTN, LLAMA_KV_CACHE_TYPE, LLAMA_THREADS, LLAMA_UBATCH_SIZE,
 };
 use crate::startup_progress::{ProgressCallback, StartupPhase, StartupProgress};
 
@@ -193,8 +192,6 @@ impl LlamaServerHandle {
             .arg("--no-webui")
             .arg("-fa")
             .arg(LLAMA_FLASH_ATTN)
-            .arg("--ctx-checkpoints")
-            .arg(LLAMA_CTX_CHECKPOINTS.to_string())
             .env("LLAMA_ARG_N_GPU_LAYERS", "0")
             .env("LLAMA_ARG_DEVICE", "none")
             .stdout(Stdio::null())
@@ -231,8 +228,7 @@ impl LlamaServerHandle {
                 "ubatch": LLAMA_UBATCH_SIZE,
                 "kv_cache": LLAMA_KV_CACHE_TYPE,
                 "flash_attn": LLAMA_FLASH_ATTN,
-                "ctx_checkpoints": LLAMA_CTX_CHECKPOINTS,
-                "cmd_flags": "-c -np -t -b -ub -ctk -ctv -ngl --no-op-offload --device --cache-ram 0 --no-warmup --no-webui -fa auto --ctx-checkpoints 0",
+                "cmd_flags": "-c -np -t -b -ub -ctk -ctv -ngl --no-op-offload --device --cache-ram 0 --no-warmup --no-webui -fa auto",
             }),
         );
         // #endregion

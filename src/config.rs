@@ -8,14 +8,12 @@ use std::path::PathBuf;
 pub const CONTEXT_LENGTH: u32 = 1_000;
 /// CPU 推論スレッド数（低メモリ向け）
 pub const LLAMA_THREADS: u32 = 2;
-/// 論理バッチサイズ（プロンプト処理時ピーク RAM 抑制）
-pub const LLAMA_BATCH_SIZE: u32 = 256;
-/// 物理バッチサイズ。64 まで下げるとプロンプト処理が体感 2 倍遅くなるため 128 を維持
+/// 論理バッチサイズ
+pub const LLAMA_BATCH_SIZE: u32 = 512;
+/// 物理バッチサイズ
 pub const LLAMA_UBATCH_SIZE: u32 = 128;
-/// Flash Attention。CPU では強制 on が逆に遅くなるケースがあるため auto（実測で減速確認済み）
+/// Flash Attention（未指定時は llama-server 既定 auto と同等）
 pub const LLAMA_FLASH_ATTN: &str = "auto";
-/// SWA コンテキスト checkpoint 数（0 = 無効・RAM 節約）
-pub const LLAMA_CTX_CHECKPOINTS: u32 = 0;
 /// KV キャッシュ量子化（f16 既定より RAM 節約）
 pub const LLAMA_KV_CACHE_TYPE: &str = "q8_0";
 pub const GEMMA_TEMPERATURE: f32 = 1.0;
