@@ -40,7 +40,7 @@ fn main() {
     };
     let manifest = format!(
         r#"{{
-  "version": "0.2.0",
+  "version": "3.0.0",
   "packaging": "{packaging}"
 }}
 "#

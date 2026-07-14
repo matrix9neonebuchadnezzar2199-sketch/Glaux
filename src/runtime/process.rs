@@ -63,6 +63,8 @@ pub fn check_memory_for_model(
 
 pub struct LlamaServerHandle {
     child: Option<Child>,
+    /// 子プロセス PID（メモリ監視用。`child` が None でも保持）
+    pub child_pid: u32,
     pub port: u16,
     pub base_url: String,
 }
@@ -190,6 +192,7 @@ impl LlamaServerHandle {
             .arg("0")
             .arg("--no-warmup")
             .arg("--no-webui")
+            .arg("--jinja")
             .arg("-fa")
             .arg(LLAMA_FLASH_ATTN)
             .env("LLAMA_ARG_N_GPU_LAYERS", "0")
@@ -254,6 +257,7 @@ impl LlamaServerHandle {
 
         Ok(Self {
             child: Some(child),
+            child_pid,
             port,
             base_url,
         })
@@ -404,6 +408,26 @@ fn child_memory_mb(pid: u32, sys: &mut System) -> u64 {
         .unwrap_or(0)
 }
 
+/// Glaux 本体 + llama-server の合計 RSS（MB）。ライブ表示用。
+pub fn combined_runtime_memory_mb(llama_pid: Option<u32>) -> u64 {
+    let self_pid = Pid::from_u32(std::process::id());
+    let mut pids = vec![self_pid];
+    if let Some(pid) = llama_pid {
+        pids.push(Pid::from_u32(pid));
+    }
+    let mut sys = System::new();
+    sys.refresh_processes(ProcessesToUpdate::Some(&pids), true);
+    let self_mb = sys
+        .process(self_pid)
+        .map(|p| p.memory() / 1024 / 1024)
+        .unwrap_or(0);
+    let llama_mb = llama_pid
+        .and_then(|pid| sys.process(Pid::from_u32(pid)))
+        .map(|p| p.memory() / 1024 / 1024)
+        .unwrap_or(0);
+    self_mb + llama_mb
+}
+
 fn read_stderr_tail(path: &std::path::Path, max_bytes: usize) -> String {
     let Ok(bytes) = std::fs::read(path) else {
         return String::new();
@@ -484,7 +508,33 @@ fn wait_until_healthy_with_progress(
         ));
 
         for url in &health_urls {
-            if client.get(url).send().is_ok() {
+            if let Ok(resp) = client.get(url).send() {
+                if !resp.status().is_success() {
+                    continue;
+                }
+                // /health は読込完了後 {"status":"ok"}。503 Loading model は未完了。
+                if url.ends_with("/health") {
+                    if let Ok(body) = resp.text() {
+                        if body.contains("\"status\":\"ok\"")
+                            || body.contains("\"status\": \"ok\"")
+                        {
+                            // #region agent log
+                            crate::debug_agent_log::agent_log(
+                                "H5",
+                                "process.rs:health_ok",
+                                "health check passed",
+                                serde_json::json!({
+                                    "url": url,
+                                    "proc_mb": proc_mb,
+                                    "elapsed_secs": started.elapsed().as_secs(),
+                                }),
+                            );
+                            // #endregion
+                            return Ok(());
+                        }
+                        continue;
+                    }
+                }
                 // #region agent log
                 crate::debug_agent_log::agent_log(
                     "H5",
@@ -541,10 +591,9 @@ mod tests {
     fn estimate_required_memory_uses_reduced_runtime_buffer() {
         let (dir, model) = temp_model(11 * 1024 * 1024);
 
-        let required = estimate_required_memory_mb(&model, 1_000, 0);
-        // 11 MB model + 256 runtime + 128 ctx-term = 395 MB（旧式 523 MB より小さい）
-        assert_eq!(required, 395);
-        assert!(required < 523, "旧 runtime 384 見積りより小さいこと");
+        let required = estimate_required_memory_mb(&model, 2_000, 0);
+        // 11 MB model + 256 runtime + 256 ctx-term = 523 MB
+        assert_eq!(required, 523);
 
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -553,7 +602,7 @@ mod tests {
     fn estimate_required_memory_respects_floor() {
         let (dir, model) = temp_model(1);
 
-        let required = estimate_required_memory_mb(&model, 1_000, 2_048);
+        let required = estimate_required_memory_mb(&model, 2_000, 2_048);
         assert_eq!(required, 2_048);
 
         let _ = std::fs::remove_dir_all(dir);

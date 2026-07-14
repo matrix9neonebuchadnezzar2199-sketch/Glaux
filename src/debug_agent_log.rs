@@ -1,8 +1,13 @@
-//! Debug-mode NDJSON logger (session 5a290a)
+//! Debug-mode NDJSON logger (session 5a290a + 0c72de)
+//!
+//! 出力を再開するときは `ENABLED` を `true` に戻す。
 
 use serde_json::json;
 use std::io::Write;
 use std::path::PathBuf;
+
+/// デバッグ NDJSON をファイルへ書くか。配布・通常運用では false。
+const ENABLED: bool = false;
 
 // #region agent log
 fn log_paths() -> Vec<PathBuf> {
@@ -12,7 +17,46 @@ fn log_paths() -> Vec<PathBuf> {
     paths
 }
 
+fn debug_session_paths() -> Vec<PathBuf> {
+    let mut paths = vec![];
+    paths.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("debug-0c72de.log"));
+    paths.push(crate::paths::app_root().join("debug-0c72de.log"));
+    paths.push(crate::runtime::data_dir().join("debug-0c72de.log"));
+    paths
+}
+
+pub fn debug_session_log(
+    hypothesis_id: &str,
+    location: &str,
+    message: &str,
+    data: serde_json::Value,
+) {
+    if !ENABLED {
+        return;
+    }
+    let entry = json!({
+        "sessionId": "0c72de",
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data,
+        "timestamp": std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0),
+    });
+    let line = entry.to_string();
+    for path in debug_session_paths() {
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(f, "{line}");
+        }
+    }
+}
+
 pub fn agent_log(hypothesis_id: &str, location: &str, message: &str, data: serde_json::Value) {
+    if !ENABLED {
+        return;
+    }
     let entry = json!({
         "sessionId": "5a290a",
         "hypothesisId": hypothesis_id,
@@ -40,6 +84,9 @@ pub fn log_input_events(
     len_after: usize,
     nl_after: usize,
 ) {
+    if !ENABLED {
+        return;
+    }
     let input_changed = len_before != len_after || nl_before != nl_after;
     ctx.input(|i| {
         for event in &i.events {

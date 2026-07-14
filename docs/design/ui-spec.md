@@ -8,7 +8,7 @@ Component Gallery 名で統一。アプリ名: **Glaux -OFFLINE AI Chat-**
 - **Model status bar**: `{モデル名} — {状態}`
 - **Model control buttons**: 起動、停止、解説
 - **Message list**: Bot / User バブル（テーマ連動）
-- **Progress indicator**: `Context: 約 N / 4000 tokens`
+- **Progress indicator**: `Context: 約 N / 3000` · `メモリ 約 N MB`（Glaux + llama-server 合計・ライブ）
 - **入力欄**: Textarea + 送信 + クリーン + **プロンプト支援**（ホバーメニュー、紺背景）
 
 ## 状態

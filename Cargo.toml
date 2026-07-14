@@ -1,6 +1,6 @@
 [package]
 name = "glaux"
-version = "0.2.0"
+version = "3.0.0"
 edition = "2021"
 description = "Glaux -OFFLINE AI Chat- — local offline chatbot with portable Gemma 4 bundle"
 build = "build.rs"

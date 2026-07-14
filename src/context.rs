@@ -1,6 +1,6 @@
 //! 会話コンテキスト（メモリのみ）
 
-use crate::config::CONTEXT_LENGTH;
+use crate::config::{api_system_content, PromptFormat, CONTEXT_LENGTH};
 
 #[derive(Debug, Clone)]
 pub struct ChatMessage {
@@ -86,10 +86,15 @@ impl ConversationContext {
         self.messages.clear();
     }
 
-    pub fn to_api_messages(&self) -> Vec<serde_json::Value> {
+    pub fn to_api_messages(
+        &self,
+        prompt_format: PromptFormat,
+        model_file: &str,
+    ) -> Vec<serde_json::Value> {
+        let system = api_system_content(prompt_format, model_file, &self.system_prompt);
         let mut out = vec![serde_json::json!({
             "role": "system",
-            "content": self.system_prompt,
+            "content": system,
         })];
         for m in &self.messages {
             out.push(serde_json::json!({

@@ -1,7 +1,8 @@
 //! Drawer / Modal
 
 use crate::app::{GlauxApp, SettingsSnapshot};
-use crate::config::{model_display_name, model_min_memory_mb, FontSizePreset, ThemePreset};
+use crate::config::{model_display_name, model_min_memory_mb, FontSizePreset, PromptFormat, ThemePreset};
+use crate::config::suggested_prompt_format_for_filename;
 use crate::paths::{self, APP_TITLE};
 use crate::runtime::check_memory_mb;
 use egui::{
@@ -137,6 +138,7 @@ pub fn draw_settings(app: &mut GlauxApp, ctx: &egui::Context) {
                         } else {
                             let selected_label =
                                 model_display_name(app.config.model_filename());
+                            let model_before = app.config.model_file.clone();
                             egui::ComboBox::from_id_salt("model_file_combo")
                                 .selected_text(selected_label)
                                 .width(440.0)
@@ -150,6 +152,11 @@ pub fn draw_settings(app: &mut GlauxApp, ctx: &egui::Context) {
                                         );
                                     }
                                 });
+                            if app.config.model_file != model_before {
+                                app.config.prompt_format = suggested_prompt_format_for_filename(
+                                    app.config.model_filename(),
+                                );
+                            }
 
                             ui.add_space(6.0);
                             ui.label(
@@ -164,6 +171,37 @@ pub fn draw_settings(app: &mut GlauxApp, ctx: &egui::Context) {
                                 ))
                                 .small()
                                 .color(theme.muted),
+                            );
+                        }
+
+                        ui.add_space(12.0);
+                        field_label(ui, &theme, "プロンプト形式");
+                        segmented_row(ui, &theme, |ui| {
+                            for format in PromptFormat::ALL {
+                                ui.selectable_value(
+                                    &mut app.config.prompt_format,
+                                    format,
+                                    format.label_ja(),
+                                );
+                            }
+                        });
+                        ui.add_space(4.0);
+                        ui.label(
+                            RichText::new(app.config.prompt_format.hint_ja())
+                                .small()
+                                .color(theme.muted),
+                        );
+                        let suggested = suggested_prompt_format_for_filename(
+                            app.config.model_filename(),
+                        );
+                        if app.config.prompt_format != suggested {
+                            ui.label(
+                                RichText::new(format!(
+                                    "推奨: {}",
+                                    suggested.label_ja()
+                                ))
+                                .small()
+                                .color(theme.warning),
                             );
                         }
                     });

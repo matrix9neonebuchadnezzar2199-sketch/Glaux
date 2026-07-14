@@ -200,7 +200,7 @@ export const USER_STORIES = [
     userStory: '利用者として現在のコンテキスト使用量の概算を見たい',
     precondition: '会話あり',
     steps: '1. メッセージ追加 2. Context 表示を確認',
-    expected: '約 N / 4000 tokens 形式で更新される',
+    expected: '約 N / 3000 · メモリ 約 N MB 形式で更新される',
     apis: 'n/a',
     implStatus: 'implemented',
     testMethod: 'manual',

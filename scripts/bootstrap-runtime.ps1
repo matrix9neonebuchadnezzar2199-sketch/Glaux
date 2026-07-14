@@ -9,6 +9,8 @@ $ModelDir = Join-Path $Artifacts "model"
 $Cache = Join-Path $Root ".cache\bootstrap"
 
 $LlamaZipUrl = "https://github.com/ggml-org/llama.cpp/releases/download/b9760/llama-b9760-bin-win-cpu-x64.zip"
+$ModelMiniCpmUrl = "https://huggingface.co/Abiray/MiniCPM5-1B-GGUF/resolve/main/minicpm5-1b-Q8_0.gguf"
+$ModelMiniCpmF16Url = "https://huggingface.co/Abiray/MiniCPM5-1B-GGUF/resolve/main/minicpm5-1b-f16.gguf"
 $ModelQwen3BQ3Url = "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q3_k_m.gguf"
 $ModelQwen3BUrl = "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q2_k.gguf"
 $ModelMiniUrl = "https://huggingface.co/mmnga/RakutenAI-2.0-mini-instruct-gguf/resolve/main/RakutenAI-2.0-mini-instruct-Q4_K_M.gguf"
@@ -19,6 +21,8 @@ New-Item -ItemType Directory -Force -Path $Artifacts, $ModelDir, $Cache | Out-Nu
 
 $LlamaZip = Join-Path $Cache "llama-b9760-bin-win-cpu-x64.zip"
 $ExtractDir = Join-Path $Cache "llama-b9760-bin-win-cpu-x64"
+$ModelMiniCpmOut = Join-Path $ModelDir "minicpm5-1b-Q8_0.gguf"
+$ModelMiniCpmF16Out = Join-Path $ModelDir "minicpm5-1b-f16.gguf"
 $ModelQwen3BQ3Out = Join-Path $ModelDir "qwen2.5-3b-instruct-q3_k_m.gguf"
 $ModelQwen3BOut = Join-Path $ModelDir "qwen2.5-3b-instruct-q2_k.gguf"
 $ModelMiniOut = Join-Path $ModelDir "RakutenAI-2.0-mini-instruct-Q4_K_M.gguf"
@@ -67,6 +71,16 @@ foreach ($dll in $VcRedistDlls) {
     }
 }
 
+if (-not (Test-Path $ModelMiniCpmOut)) {
+    Write-Host "Downloading MiniCPM5 1B Q8_0 GGUF (~1.1 GB)..."
+    curl.exe -L --fail --output $ModelMiniCpmOut $ModelMiniCpmUrl
+}
+
+if (-not (Test-Path $ModelMiniCpmF16Out)) {
+    Write-Host "Downloading MiniCPM5 1B F16 GGUF (~2.1 GB)..."
+    curl.exe -L --fail --output $ModelMiniCpmF16Out $ModelMiniCpmF16Url
+}
+
 if (-not (Test-Path $ModelQwen3BQ3Out)) {
     Write-Host "Downloading Qwen 2.5 3B Instruct Q3_K_M GGUF (~0.9 GB)..."
     curl.exe -L --fail --output $ModelQwen3BQ3Out $ModelQwen3BQ3Url
@@ -95,6 +109,12 @@ if (-not (Test-Path $ModelE4BOut)) {
 Write-Host ""
 Write-Host "Runtime ready:"
 Write-Host "  $Artifacts\llama-server.exe (+ DLLs)"
+if (Test-Path $ModelMiniCpmOut) {
+    Write-Host "  $ModelMiniCpmOut"
+}
+if (Test-Path $ModelMiniCpmF16Out) {
+    Write-Host "  $ModelMiniCpmF16Out"
+}
 if (Test-Path $ModelQwen3BQ3Out) {
     Write-Host "  $ModelQwen3BQ3Out"
 }

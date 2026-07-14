@@ -5,7 +5,7 @@ mod extractor;
 mod process;
 
 pub use extractor::{resolve_runtime_with_progress, RuntimePaths};
-pub use process::{check_memory_mb, LlamaServerHandle};
+pub use process::{check_memory_mb, combined_runtime_memory_mb, LlamaServerHandle};
 
 use crate::paths::{self, dev_artifacts_root};
 use std::path::PathBuf;

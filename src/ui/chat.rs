@@ -5,7 +5,7 @@ use crate::context::ContextUsageLevel;
 use crate::config::{model_display_name, CONTEXT_LENGTH};
 use crate::debug_agent_log;
 use crate::model_state::ModelRuntimeState;
-use crate::paths::{APP_TITLE, APP_VERSION};
+use crate::paths::{APP_TITLE, APP_VERSION_LABEL};
 use crate::ui::prompt_assist;
 use egui::{Align, Color32, CornerRadius, Frame, Label, Layout, Margin, RichText, ScrollArea, Stroke};
 
@@ -15,6 +15,11 @@ const BUBBLE_MAX_WIDTH: f32 = 560.0;
 const BUBBLE_MIN_WIDTH: f32 = 280.0;
 /// チャット末尾（コピー行の下）と入力パネル枠の間の隙間
 const CHAT_BOTTOM_GAP: f32 = 20.0;
+/// 横スクロール注意バーの高さ
+const DISCLAIMER_BAR_HEIGHT: f32 = 28.0;
+const DISCLAIMER_MARQUEE_TEXT: &str =
+    "AIはハルシネーション（幻覚）を引き起こす場合があります。重要な判断は必ずご自身で確認してください。生成内容の正確性・完全性は保証されません。";
+const DISCLAIMER_SCROLL_SPEED: f32 = 52.0;
 
 fn bubble_max_width(available: f32) -> f32 {
     (available * BUBBLE_WIDTH_RATIO).clamp(BUBBLE_MIN_WIDTH, BUBBLE_MAX_WIDTH)
@@ -52,7 +57,7 @@ pub fn draw_main(app: &mut GlauxApp, ctx: &egui::Context) {
                         nav_button(ui, "設定", || app.show_settings = true);
                         ui.add_space(8.0);
                         ui.label(
-                            RichText::new(format!("v{APP_VERSION}"))
+                            RichText::new(format!("v{APP_VERSION_LABEL}"))
                                 .size(12.0)
                                 .color(theme.muted),
                         );
@@ -101,6 +106,13 @@ pub fn draw_main(app: &mut GlauxApp, ctx: &egui::Context) {
                             ContextUsageLevel::Caution => theme.warning,
                             ContextUsageLevel::Warning | ContextUsageLevel::Blocked => theme.danger,
                         };
+                        // right_to_left なので先に描いたものが右端
+                        if let Some(mem_mb) = app.runtime_memory_mb {
+                            ui.label(
+                                RichText::new(format!("メモリ 約 {mem_mb} MB")).color(theme.muted),
+                            );
+                            ui.label(RichText::new("·").color(theme.muted));
+                        }
                         ui.label(RichText::new(format!("Context 約 {est} / {max}")).color(color));
                     });
                 });
@@ -141,7 +153,7 @@ pub fn draw_main(app: &mut GlauxApp, ctx: &egui::Context) {
                     egui::TextEdit::multiline(&mut app.input)
                         .desired_width(f32::INFINITY)
                         .desired_rows(3)
-                        .hint_text("メッセージを入力…（改行は Shift+Enter）")
+                        .hint_text("プロンプトを入力…（改行は Shift+Enter）")
                         // Enter は IME 確定専用。改行は Shift+Enter のみ（ログ H1 確認済み）
                         .return_key(egui::KeyboardShortcut::new(
                             egui::Modifiers::SHIFT,
@@ -187,92 +199,127 @@ pub fn draw_main(app: &mut GlauxApp, ctx: &egui::Context) {
     egui::CentralPanel::default().show(ctx, |ui| {
         ui.visuals_mut().panel_fill = theme.panel_bg;
 
-        if app.conversation.messages.is_empty() && !app.is_streaming {
-            draw_empty_state(app, ui);
-        } else {
-            let is_streaming = app.is_streaming;
-            // 生成中は常に末尾追従（手動スクロールより優先）
-            if is_streaming {
-                app.chat_follow_bottom = true;
+        ui.vertical(|ui| {
+            let disclaimer_h = DISCLAIMER_BAR_HEIGHT + 6.0;
+            let chat_h = (ui.available_height() - disclaimer_h).max(120.0);
+            ui.allocate_ui_with_layout(
+                egui::vec2(ui.available_width(), chat_h),
+                Layout::top_down(Align::LEFT),
+                |ui| {
+                    if app.conversation.messages.is_empty() && !app.is_streaming {
+                        draw_empty_state(app, ui);
+                    } else {
+                        draw_chat_messages(app, ui, &theme);
+                    }
+                },
+            );
+            draw_disclaimer_marquee(ui, &theme);
+        });
+    });
+}
+
+/// メッセージ一覧（スクロール領域）
+fn draw_chat_messages(app: &mut GlauxApp, ui: &mut egui::Ui, theme: &crate::theme::ThemeTokens) {
+    let is_streaming = app.is_streaming;
+    if is_streaming {
+        app.chat_follow_bottom = true;
+    }
+    let stick = app.chat_follow_bottom || is_streaming;
+
+    let scroll_out = ScrollArea::vertical()
+        .id_salt("chat_messages")
+        .auto_shrink([false, false])
+        .stick_to_bottom(stick)
+        .show(ui, |ui| {
+            let bubble_max = bubble_max_width(ui.available_width());
+            let mut pending_copy: Option<String> = None;
+            for msg in &app.conversation.messages {
+                let is_user = msg.role == "user";
+                if is_user {
+                    ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
+                        draw_bubble(
+                            ui,
+                            &msg.content,
+                            &msg.timestamp,
+                            theme.user_bubble,
+                            theme.text,
+                            theme.muted,
+                            bubble_max,
+                            false,
+                        );
+                    });
+                } else {
+                    draw_bubble(
+                        ui,
+                        &msg.content,
+                        &msg.timestamp,
+                        theme.bot_bubble,
+                        theme.text,
+                        theme.muted,
+                        bubble_max,
+                        true,
+                    );
+                    ui.horizontal(|ui| {
+                        if ui.small_button("コピー").clicked() {
+                            pending_copy = Some(msg.content.clone());
+                        }
+                    });
+                }
+                ui.add_space(8.0);
             }
-            let stick = app.chat_follow_bottom || is_streaming;
-
-            let scroll_out = ScrollArea::vertical()
-                .id_salt("chat_messages")
-                .auto_shrink([false, false])
-                .stick_to_bottom(stick)
-                .show(ui, |ui| {
-                    let bubble_max = bubble_max_width(ui.available_width());
-                    let mut pending_copy: Option<String> = None;
-                    for msg in &app.conversation.messages {
-                        let is_user = msg.role == "user";
-                        if is_user {
-                            ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
-                                draw_bubble(
-                                    ui,
-                                    &msg.content,
-                                    &msg.timestamp,
-                                    theme.user_bubble,
-                                    theme.text,
-                                    theme.muted,
-                                    bubble_max,
-                                    false,
-                                );
-                            });
-                        } else {
-                            draw_bubble(
-                                ui,
-                                &msg.content,
-                                &msg.timestamp,
-                                theme.bot_bubble,
-                                theme.text,
-                                theme.muted,
-                                bubble_max,
-                                true,
-                            );
-                            ui.horizontal(|ui| {
-                                if ui.small_button("コピー").clicked() {
-                                    pending_copy = Some(msg.content.clone());
-                                }
-                            });
-                        }
-                        ui.add_space(8.0);
-                    }
-                    if let Some(text) = pending_copy {
-                        if let Ok(mut cb) = arboard::Clipboard::new() {
-                            let _ = cb.set_text(text);
-                            app.toast = Some("コピーしました".into());
-                        }
-                    }
-
-                    // コピー行までスクロール可能にし、入力パネル枠との間に隙間を確保
-                    ui.add_space(CHAT_BOTTOM_GAP);
-                    let bottom_anchor = ui.allocate_response(egui::vec2(1.0, 1.0), egui::Sense::hover());
-                    if stick {
-                        bottom_anchor.scroll_to_me(Some(Align::BOTTOM));
-                    }
-                });
-
-            let max_y =
-                (scroll_out.content_size.y - scroll_out.inner_rect.height()).max(0.0);
-            let scroll_state = egui::scroll_area::State::load(ctx, scroll_out.id);
-
-            // ストリーミングでバブル高さだけ増える場合、stick_to_bottom だけでは足りないことがある
-            if stick {
-                if let Some(mut state) = scroll_state {
-                    if state.offset.y < max_y - 0.5 {
-                        state.offset.y = max_y;
-                        state.store(ctx, scroll_out.id);
-                    }
+            if let Some(text) = pending_copy {
+                if let Ok(mut cb) = arboard::Clipboard::new() {
+                    let _ = cb.set_text(text);
+                    app.toast = Some("コピーしました".into());
                 }
             }
 
-            // 上方向へ手動スクロールしたら自動追従を止める（生成中は上で follow を維持）
-            if !is_streaming && ui.input(|i| i.smooth_scroll_delta.y < -1.0) {
-                app.chat_follow_bottom = false;
+            ui.add_space(CHAT_BOTTOM_GAP);
+            let bottom_anchor = ui.allocate_response(egui::vec2(1.0, 1.0), egui::Sense::hover());
+            if stick {
+                bottom_anchor.scroll_to_me(Some(Align::BOTTOM));
+            }
+        });
+
+    let max_y = (scroll_out.content_size.y - scroll_out.inner_rect.height()).max(0.0);
+    let scroll_state = egui::scroll_area::State::load(ui.ctx(), scroll_out.id);
+
+    if stick {
+        if let Some(mut state) = scroll_state {
+            if state.offset.y < max_y - 0.5 {
+                state.offset.y = max_y;
+                state.store(ui.ctx(), scroll_out.id);
             }
         }
-    });
+    }
+
+    if !is_streaming && ui.input(|i| i.smooth_scroll_delta.y < -1.0) {
+        app.chat_follow_bottom = false;
+    }
+}
+
+/// チャット最下段：黄色の横スクロール注意文
+fn draw_disclaimer_marquee(ui: &mut egui::Ui, theme: &crate::theme::ThemeTokens) {
+    let color = theme.warning;
+    Frame::new()
+        .fill(theme.surface.linear_multiply(0.95))
+        .stroke(Stroke::new(1.0, theme.border))
+        .inner_margin(Margin::symmetric(0, 4))
+        .show(ui, |ui| {
+            ui.set_min_height(DISCLAIMER_BAR_HEIGHT);
+            let rect = ui.max_rect();
+            let time = ui.input(|i| i.time as f32);
+            let font_id = egui::TextStyle::Small.resolve(ui.style());
+            let marquee = format!("{DISCLAIMER_MARQUEE_TEXT}　　　{DISCLAIMER_MARQUEE_TEXT}　　　");
+            let galley = ui.painter().layout_no_wrap(marquee, font_id, color);
+            let period = (galley.size().x * 0.5).max(1.0);
+            let x = rect.left() - (time * DISCLAIMER_SCROLL_SPEED) % period;
+            let pos = egui::pos2(x, rect.center().y - galley.size().y * 0.5);
+            ui.painter()
+                .with_clip_rect(rect)
+                .galley(pos, galley, color);
+            ui.ctx().request_repaint();
+        });
 }
 
 fn nav_button(ui: &mut egui::Ui, label: &str, mut action: impl FnMut()) {

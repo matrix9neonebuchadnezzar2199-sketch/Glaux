@@ -2,8 +2,8 @@
 
 use crate::api::chat::{self, ChatRequest, StreamEvent};
 use crate::config::{
-    load_config, model_api_id, model_display_name, model_min_memory_mb, AppConfig, CONTEXT_LENGTH,
-    GEMMA_TEMPERATURE, GEMMA_TOP_K, GEMMA_TOP_P,
+    load_config, model_api_id, model_display_name, model_min_memory_mb, api_system_content,
+    AppConfig, CONTEXT_LENGTH,
 };
 use crate::context::{ContextUsageLevel, ConversationContext};
 use crate::model_state::ModelRuntimeState;
@@ -21,6 +21,7 @@ use std::process::Command;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::mpsc;
 use std::thread;
+use std::time::{Duration, Instant};
 
 const SYSTEM_PROMPT: &str = "日本語で簡潔かつ正確に答えてください。前置き・自己紹介・役割の宣言は不要です。ユーザーが指定した形式とルールに従って回答してください。";
 
@@ -63,6 +64,10 @@ pub struct GlauxApp {
     pub reload_message: Option<String>,
     /// 起動フェーズの進捗（プログレスバー用）
     pub startup_progress: Option<StartupProgress>,
+    /// Glaux + llama-server 合計 RSS（MB）。ライブ更新。
+    pub runtime_memory_mb: Option<u64>,
+    /// メモリ表示の最終更新時刻
+    memory_refreshed_at: Instant,
 
     worker_rx: Receiver<WorkerMsg>,
     worker_tx: Sender<WorkerMsg>,
@@ -97,6 +102,10 @@ impl GlauxApp {
             chat_follow_bottom: true,
             reload_message: None,
             startup_progress: None,
+            runtime_memory_mb: None,
+            memory_refreshed_at: Instant::now()
+                .checked_sub(Duration::from_secs(2))
+                .unwrap_or_else(Instant::now),
             worker_rx: rx,
             worker_tx: tx,
         };
@@ -225,7 +234,29 @@ impl GlauxApp {
         if let Some(mut s) = self.server.take() {
             s.stop();
         }
+        self.runtime_memory_mb = None;
         self.model_state = ModelRuntimeState::Stopped;
+    }
+
+    /// Glaux + llama-server の合計メモリを約1秒間隔で更新する。
+    pub fn refresh_runtime_memory(&mut self) {
+        let running = matches!(
+            self.model_state,
+            ModelRuntimeState::Ready
+                | ModelRuntimeState::Starting
+                | ModelRuntimeState::Generating
+        );
+        if !running {
+            self.runtime_memory_mb = None;
+            return;
+        }
+        if self.memory_refreshed_at.elapsed() < Duration::from_secs(1) {
+            return;
+        }
+        let llama_pid = self.server.as_ref().map(|s| s.child_pid);
+        // Starting 中はまだ handle が無いことがある → Glaux 本体のみ
+        self.runtime_memory_mb = Some(crate::runtime::combined_runtime_memory_mb(llama_pid));
+        self.memory_refreshed_at = Instant::now();
     }
 
     pub fn send_chat(&mut self) {
@@ -262,14 +293,43 @@ impl GlauxApp {
             .map(|s| s.base_url.clone())
             .unwrap_or_default();
 
+        let (temperature, top_p, top_k) = self.config.prompt_format.sampling();
+        let model_file = self.config.model_filename().to_string();
+        let system_for_api = api_system_content(
+            self.config.prompt_format,
+            &model_file,
+            &self.conversation.system_prompt,
+        );
         let req = ChatRequest {
-            model: model_api_id(self.config.model_filename()),
-            messages: self.conversation.to_api_messages(),
-            temperature: GEMMA_TEMPERATURE,
-            top_p: GEMMA_TOP_P,
+            model: model_api_id(&model_file),
+            messages: self
+                .conversation
+                .to_api_messages(self.config.prompt_format, &model_file),
+            prompt_format: self.config.prompt_format,
+            temperature,
+            top_p,
             stream: true,
-            top_k: Some(GEMMA_TOP_K),
+            top_k,
         };
+
+        // #region agent log
+        crate::debug_agent_log::debug_session_log(
+            "H3",
+            "app.rs:send_chat_inner",
+            "chat request config",
+            serde_json::json!({
+                "runId": "post-fix-v2",
+                "model_file": model_file,
+                "prompt_format": format!("{:?}", self.config.prompt_format),
+                "uses_jinja_chat_api": self.config.prompt_format.uses_jinja_chat_api(),
+                "system_for_api": system_for_api,
+                "temperature": req.temperature,
+                "top_p": req.top_p,
+                "top_k": req.top_k,
+                "message_count": req.messages.len(),
+            }),
+        );
+        // #endregion
 
         let tx = self.worker_tx.clone();
         let (stx, srx) = mpsc::channel();
@@ -312,6 +372,11 @@ impl GlauxApp {
                     self.model_state = ModelRuntimeState::Ready;
                     self.error_message = None;
                     self.startup_progress = None;
+                    // 起動直後にすぐメモリを取る
+                    self.memory_refreshed_at = Instant::now()
+                        .checked_sub(Duration::from_secs(2))
+                        .unwrap_or_else(Instant::now);
+                    self.refresh_runtime_memory();
                     if self.reload_message.take().is_some() {
                         self.toast = Some("モデルの再読み込みが完了しました".into());
                     }
@@ -321,6 +386,7 @@ impl GlauxApp {
                     self.error_message = Some(e);
                     self.reload_message = None;
                     self.startup_progress = None;
+                    self.runtime_memory_mb = None;
                 }
                 WorkerMsg::Stream(ev) => match ev {
                     StreamEvent::Token(t) => {
@@ -510,6 +576,7 @@ fn try_embedded_cjk_font(ctx: &egui::Context) -> bool {
 impl eframe::App for GlauxApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_worker();
+        self.refresh_runtime_memory();
         self.theme.apply_to_ctx(ctx);
         if self.toast.is_some()
             || self.is_streaming
@@ -517,6 +584,9 @@ impl eframe::App for GlauxApp {
             || self.model_state == ModelRuntimeState::Starting
         {
             ctx.request_repaint();
+        } else if self.runtime_memory_mb.is_some() {
+            // メモリライブ表示のため約1秒間隔で再描画
+            ctx.request_repaint_after(Duration::from_secs(1));
         }
 
         ui::draw_main(self, ctx);
